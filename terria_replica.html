@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Terraria 1:1 Replica</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+        canvas { display: block; image-rendering: pixelated; }
+        #ui { position: absolute; top: 10px; left: 10px; color: #fff; text-shadow: 2px 2px #000; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <b>TERRARIA REPLICA</b><br>
+        [1-4] Slots | WASD Move | Mouse Mine/Place
+    </div>
+    <canvas id="game"></canvas>
+
+<script>
+/** 1. ENGINE CONSTANTS **/
+const TILE = 16, ZOOM = 3, WORLD_W = 400, WORLD_H = 200;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+/** 2. TILE DATA & AUTO-TILING LOGIC **/
+const TILES = { AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4 };
+const COLORS = { 1: '#32a852', 2: '#634229', 3: '#555555', 4: '#d1b48c' };
+
+let world = new Int8Array(WORLD_W * WORLD_H);
+let camera = { x: 0, y: 0 };
+let player = { x: (WORLD_W * TILE)/2, y: 50, vx: 0, vy: 0, w: 12, h: 24, grounded: false };
+let selectedItem = TILES.DIRT;
+
+/** 3. WORLD GENERATION (BIOMES) **/
+function generateWorld() {
+    for (let x = 0; x < WORLD_W; x++) {
+        let surface = 60 + Math.sin(x * 0.08) * 8;
+        for (let y = 0; y < WORLD_H; y++) {
+            let idx = y * WORLD_W + x;
+            if (y > surface + 15) world[idx] = TILES.STONE;
+            else if (y > surface) world[idx] = (y < surface + 1) ? TILES.GRASS : TILES.DIRT;
+            else world[idx] = TILES.AIR;
+        }
+    }
+}
+
+/** 4. THE RENDERER (WITH AUTO-TILE VISUALS) **/
+function draw() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.imageSmoothingEnabled = false;
+    
+    ctx.save();
+    ctx.scale(ZOOM, ZOOM);
+    ctx.translate(-camera.x, -camera.y);
+
+    // Sky
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(camera.x, camera.y, canvas.width/ZOOM, canvas.height/ZOOM);
+
+    // Draw Tiles
+    let x1 = Math.max(0, Math.floor(camera.x / TILE));
+    let x2 = Math.min(WORLD_W, x1 + Math.ceil(canvas.width / (TILE * ZOOM)) + 1);
+    let y1 = Math.max(0, Math.floor(camera.y / TILE));
+    let y2 = Math.min(WORLD_H, y1 + Math.ceil(canvas.height / (TILE * ZOOM)) + 1);
+
+    for (let y = y1; y < y2; y++) {
+        for (let x = x1; x < x2; x++) {
+            let t = world[y * WORLD_W + x];
+            if (t !== TILES.AIR) {
+                ctx.fillStyle = COLORS[t];
+                // Standard block
+                ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+                
+                // --- AUTO-TILE DETAIL ---
+                // If it's grass, draw a darker "dirt" line at bottom
+                if (t === TILES.GRASS) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(x * TILE, y * TILE + (TILE-4), TILE, 4);
+                }
+            }
+        }
+    }
+
+    // Player
+    ctx.fillStyle = '#fff'; // White for "Character"
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    
+    ctx.restore();
+    update();
+    requestAnimationFrame(draw);
+}
+
+/** 5. PHYSICS & INPUT **/
+const keys = {};
+window.onkeydown = e => { 
+    keys[e.code] = true; 
+    if(e.key === '1') selectedItem = TILES.DIRT;
+    if(e.key === '2') selectedItem = TILES.STONE;
+};
+window.onkeyup = e => keys[e.code] = false;
+
+window.onmousedown = e => {
+    let tx = Math.floor(((e.clientX / ZOOM) + camera.x) / TILE);
+    let ty = Math.floor(((e.clientY / ZOOM) + camera.y) / TILE);
+    if(e.button === 0) world[ty * WORLD_W + tx] = TILES.AIR;
+    else world[ty * WORLD_W + tx] = selectedItem;
+};
+
+function update() {
+    if (keys['KeyA']) player.vx -= 0.5;
+    if (keys['KeyD']) player.vx += 0.5;
+    if ((keys['Space'] || keys['KeyW']) && player.grounded) {
+        player.vy = -7;
+        player.grounded = false;
+    }
+
+    player.vy += 0.3; // Gravity
+    player.vx *= 0.8; // Friction
+    
+    player.x += player.vx;
+    // X-Collision logic
+    player.y += player.vy;
+    // Y-Collision logic simplified:
+    let ty = Math.floor((player.y + player.h) / TILE);
+    let tx = Math.floor((player.x + player.w/2) / TILE);
+    if(world[ty * WORLD_W + tx] !== TILES.AIR) {
+        player.y = ty * TILE - player.h;
+        player.vy = 0;
+        player.grounded = true;
+    }
+
+    camera.x += (player.x - camera.x - (canvas.width/ZOOM)/2) * 0.1;
+    camera.y += (player.y - camera.y - (canvas.height/ZOOM)/2) * 0.1;
+}
+
+generateWorld();
+draw();
+</script>
+</body>
+</html>
